@@ -7,6 +7,7 @@ class MSPUpdater:
         self.dataset_file = dataset_file
         self.origine_file = origine_file
         self.log = log
+        self.nomi_non_trovati_registrati = set()  # Set per tenere traccia dei nomi non trovati già registrati
 
     @staticmethod
     def pulisci_stringa(s):
@@ -34,15 +35,18 @@ class MSPUpdater:
         # Crea una nuova colonna "MSP" e assegna i valori dalla colonna "Codice Esterno"
         dataset["MSP"] = risultati["Codice Esterno"]
 
-        # Utilizza il logger personalizzato per registrare eventuali nomi non trovati
+        # Utilizza il logger personalizzato per registrare eventuali nomi non trovati, evitando duplicati
         nomi_non_trovati = risultati[pd.isna(risultati["Codice Esterno"])]
         for nome_non_trovato in nomi_non_trovati["name"]:
-            self.log.write_log(f"Nome non trovato: {nome_non_trovato}", level="WARNING")
+            if nome_non_trovato not in self.nomi_non_trovati_registrati:
+                self.log.write_log(f"Nome non trovato: {nome_non_trovato}", level="WARNING")
+                self.nomi_non_trovati_registrati.add(nome_non_trovato)
 
         # Salva il dataset con la colonna 'MSP' nel file originale
         dataset.to_csv(self.dataset_file, index=False)
 
         print("Colonna 'MSP' aggiunta al dataset")
+
 '''
 # Esempio di utilizzo della classe
 dataset_file = "processed_data.csv"
