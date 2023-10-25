@@ -35,7 +35,7 @@ class VCFProcessor:
 
     def process_vcf_file(self, vcf_file):
         splitted_path = vcf_file.split(os.sep)
-        tissue = splitted_path[-2].upper()
+        origin_folder = splitted_path[-2].upper()
         identifier = self.extract_identifier(vcf_file)
         
         if identifier is None:
@@ -49,35 +49,16 @@ class VCFProcessor:
         self.identifier_set.add(identifier)
         if not identifier.upper().startswith("FC") and not splitted_path[-1].upper().startswith("FC") and not splitted_path[-2].upper().startswith("FC"):
             temp_df = allel.vcf_to_dataframe(vcf_file, fields='*', alt_number=1)
-            
             if temp_df is not None:
                 temp_df['name'] = identifier
-                
-                if identifier.upper().startswith("BRCA"):
-                    temp_df['CTYPE'] = "BRCA"
-                    temp_df['TISSUE'] = tissue
-                
-                elif identifier.upper().startswith("HC"):
-                    temp_df['CTYPE'] = "HC"
-                    temp_df['TISSUE'] = "GERMLINE"
-                
+                if origin_folder == "HC" or origin_folder == "GERMLINE":
+                    temp_df["TISSUE"] = "GERMLINE"
+                elif origin_folder == "SOMATIC":
+                    temp_df["TISSUE"] = "SOMATIC"
                 else:
-                    if splitted_path[-1].upper().startswith("BRCA"):
-                        temp_df['CTYPE'] = "BRCA"
-                        temp_df['TISSUE'] = tissue
-                        self.log.write_log(f"CTYPE and identifier mismatch, identifier: {identifier}, CTYPE: BRCA, File path: {vcf_file}", level="WARNING")
-                    
-                    elif splitted_path[-1].upper().startswith("HC"):
-                        temp_df['CTYPE'] = "HC"
-                        temp_df['TISSUE'] = "GERMLINE"
-                        self.log.write_log(f"CTYPE and identifier mismatch, identifier: {identifier}, CTYPE: HC, File path: {vcf_file}", level="WARNING")
-                    
-                    else:
-                        temp_df['CTYPE'] = "UNKNOWN"
-                        temp_df['TISSUE'] = tissue
-                        self.log.write_log(f"Unknown identifier: {identifier}, File path: {vcf_file}", level="ERROR")
-                
+                    temp_df["TISSUE"] = "UNKNOWN"
                 return temp_df
+            
         else:
             return None
 
@@ -105,6 +86,8 @@ class VCFProcessor:
             print("Done!\n")
 
         df = pd.concat(df_list, ignore_index=True)
+        df["GENEINFO"] = df["GENEINFO"].apply(lambda x: x.split(":")[0] if pd.notnull(x) else x)
+        df.rename(columns={"CLINVARPAT": "RIS"}, inplace=True)
         return df
 
     @staticmethod
