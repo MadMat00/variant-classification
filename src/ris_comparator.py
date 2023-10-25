@@ -30,11 +30,11 @@ class Ris_comparator: #TODO cambiare readcsv to readexcel
         lista_ris = []
         #c=0
         for index, row in dataframe.iterrows():
-            ctype, msp, ris = row["CTYPE"], row["MSP"], row["RIS."]
+            ctype, msp, ris = row["CTYPE"], row["MSP"], row["RIS"]
             if ctype == "BRCA":
-                genes_ris = self.brca_dataframe[self.brca_dataframe["MSP"] == msp]["RIS."].values
+                genes_ris = self.brca_dataframe[self.brca_dataframe["MSP"] == msp]["RIS"].values
             else:
-                genes_ris = self.hc_dataframe[self.hc_dataframe["MSP"] == msp]["RIS."].values
+                genes_ris = self.hc_dataframe[self.hc_dataframe["MSP"] == msp]["RIS"].values
             if genes_ris.size > 0:
                 genes_ris = genes_ris[0]
                 if ris == genes_ris:
@@ -55,6 +55,6 @@ class Ris_comparator: #TODO cambiare readcsv to readexcel
 
                 #dataframe = dataframe.drop(c)
             #c+=1
-        dataframe["RIS."] = lista_ris
+        dataframe["RIS"] = lista_ris
         return dataframe
 
