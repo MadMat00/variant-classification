@@ -5,6 +5,7 @@ import allel
 import pandas as pd
 from tqdm import tqdm
 import time
+import numpy as np
 
 class VCFProcessor:
     def __init__(self, log):
@@ -57,8 +58,23 @@ class VCFProcessor:
                     temp_df["TISSUE"] = "SOMATIC"
                 else:
                     temp_df["TISSUE"] = "UNKNOWN"
+
+                if "BRCA" in splitted_path[-1].upper() and "HC" not in splitted_path[-1].upper():
+                    temp_df["CTYPE"] = "BRCA"
+
+                elif "HC" in splitted_path[-1].upper() and "BRCA" not in splitted_path[-1].upper():
+                    temp_df["CTYPE"] = "HC"
+                elif "HC" in splitted_path[-1].upper() and "BRCA" in splitted_path[-1].upper():
+                    if splitted_path[-1].upper().index("BRCA") < splitted_path[-1].upper().index("HC"):
+                        temp_df["CTYPE"] = "BRCA"
+                        self.log.write_log(f"found both so choosing BRCA {vcf_file}", level="DEBUG")
+                    else:
+                        temp_df["CTYPE"] = "HC"
+                        self.log.write_log(f"found both so choosing HC {vcf_file}", level="DEBUG")
+                else:
+                    temp_df["CTYPE"] = np.nan
+                    self.log.write_log(f"Unable to extract CTYPE from {vcf_file}", level="WARNING")
                 return temp_df
-            
         else:
             return None
 
