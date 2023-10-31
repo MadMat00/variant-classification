@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 
 
-class Ris_comparator: #TODO cambiare readcsv to readexcel
+class RisComparator: #TODO cambiare readcsv to readexcel
     def __init__(self, brca_path, hc_path, log):
         self.brca_dataframe = self.__load_dataframe(brca_path)
         self.hc_dataframe = self.__load_dataframe(hc_path)
@@ -22,7 +22,7 @@ class Ris_comparator: #TODO cambiare readcsv to readexcel
             self.__log.write_log(level="ERROR",message=f"Nel dataframe {identificativo}, abbiamo un MSP IN più con codice: {x}")
         return
 
-    def create_new_dataframe(self, dataframe):
+    def compare_vcf_xlsx(self, dataframe):
         self.__missing_MSP(self.brca_dataframe,dataframe,identificativo="brca")
         self.__missing_MSP(self.hc_dataframe,dataframe,identificativo="hc")
 
@@ -53,8 +53,6 @@ class Ris_comparator: #TODO cambiare readcsv to readexcel
                 self.__log.write_log(level="ERROR",
                                      message=f"MSP: {msp}, non prensente nel BRCA e neanche nel HC")
 
-                #dataframe = dataframe.drop(c)
-            #c+=1
         dataframe["RIS"] = lista_ris
         return dataframe
 
