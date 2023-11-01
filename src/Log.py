@@ -8,10 +8,10 @@ class Log:
         self.dir_path = dir_path
         self.__level_list = ["TRACE", "DEBUG", "INFO", "SUCCESS", "WARNING", "ERROR", "CRITICAL"]
         self.__date = pendulum.now()
-        self.__add_log_file(self.dir_path, level="DEBUG")
+        self.__add_log_file(level="DEBUG")
         logger.remove(0)
         
-    def __add_log_file(self, file_name:str, level:str = "INFO"):
+    def __add_log_file(self, level:str = "INFO"):
         if self.save_file:
             if not os.path.exists(self.dir_path):
                 os.mkdir(self.dir_path)
