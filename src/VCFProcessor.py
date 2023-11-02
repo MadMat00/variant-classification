@@ -11,6 +11,8 @@ class VCFProcessor:
     def __init__(self, log):
         self.log = log
         self.identifier_set = set()
+        #self.cleaner = DataCleaner(log)
+        self.duplicated_files = []
 
     @staticmethod
     def should_process_file(file_name, exclude_patterns):
@@ -40,18 +42,19 @@ class VCFProcessor:
         identifier = self.extract_identifier(vcf_file)
         
         if identifier is None:
-            self.log.write_log(f"Unable to extract identifier from {vcf_file}", level="ERROR")
+            if self.log is not None: self.log.write_log(f"Unable to extract identifier from {vcf_file}", level="ERROR")
             return None
 
         if identifier in self.identifier_set:
-            self.log.write_log(f"Duplicate identifier found: {identifier}, File path: {vcf_file}", level="WARNING")
+            if self.log is not None: self.log.write_log(f"Duplicate identifier found: {identifier}, File path: {vcf_file}", level="WARNING")
+            self.duplicated_files.append(vcf_file)
             return None
 
         self.identifier_set.add(identifier)
         if not identifier.upper().startswith("FC") and not splitted_path[-1].upper().startswith("FC") and not splitted_path[-2].upper().startswith("FC"):
             temp_df = allel.vcf_to_dataframe(vcf_file, fields='*', alt_number=1)
             if temp_df is not None:
-                temp_df['name'] = identifier
+                temp_df['NAME'] = identifier
                 if origin_folder == "HC" or origin_folder == "GERMLINE":
                     temp_df["TISSUE"] = "GERMLINE"
                 elif origin_folder == "SOMATIC":
@@ -67,27 +70,41 @@ class VCFProcessor:
                 elif "HC" in splitted_path[-1].upper() and "BRCA" in splitted_path[-1].upper():
                     if splitted_path[-1].upper().index("BRCA") < splitted_path[-1].upper().index("HC"):
                         temp_df["CTYPE"] = "BRCA"
-                        self.log.write_log(f"found both so choosing BRCA {vcf_file}", level="DEBUG")
+                        if self.log is not None: self.log.write_log(f"found both so choosing BRCA {vcf_file}", level="DEBUG")
                     else:
                         temp_df["CTYPE"] = "HC"
-                        self.log.write_log(f"found both so choosing HC {vcf_file}", level="DEBUG")
+                        if self.log is not None: self.log.write_log(f"found both so choosing HC {vcf_file}", level="DEBUG")
                 else:
                     temp_df["CTYPE"] = np.nan
-                    self.log.write_log(f"Unable to extract CTYPE from {vcf_file}", level="WARNING")
+                    if self.log is not None: self.log.write_log(f"Unable to extract CTYPE from {vcf_file}", level="WARNING")
+                
+                with open(vcf_file, 'r') as f:
+                    index = 0
+                    for line in f.readlines():
+                        if not line.startswith("#"):
+                            try:
+                                gt = line.split('GT:')[1].split('/')
+                                gt1 = gt[0][-1]
+                                gt2 = gt[1][0]
+                                temp_df.loc[index, "GT"] = f"{gt1}/{gt2}"
+                                index += 1
+                            except Exception as e:
+                                if self.log is not None: self.log.write_log(f"Unable to extract GT from {vcf_file}", level="WARNING")
+                                temp_df.loc[index, "GT"] = np.nan
                 return temp_df
         else:
             return None
 
     def get_dataframe(self, path="Data/VCF", exclude_patterns=None):
         if exclude_patterns is None:
-            exclude_patterns = ["POS", "NEG", "PROVA", "VEQ", "EM", "CTRL"]
+            exclude_patterns = ["POS", "NEG", "PROVA", "VEQ", "EM", "CTRL","DB","DM"]
         
         data_folder = os.path.join(os.getcwd(), path)
         df_list = []
 
         for root, dirs, files in os.walk(data_folder):
             print(f"Processing: {root}")
-            self.log.write_log(f"Starting processing directory {root}", level="INFO")
+            if self.log is not None: self.log.write_log(f"Starting processing directory {root}", level="INFO")
             start_time = time.time()
 
             for file in tqdm(files, leave=False):
@@ -97,14 +114,16 @@ class VCFProcessor:
                     if df_processed is not None:
                         df_list.append(df_processed)
 
-            self.log.write_log(f"Finished processing directory {root}", level="SUCCESS")
-            self.log.write_log(f"Processing time: {time.time() - start_time} seconds", level="DEBUG")
+            if self.log is not None: self.log.write_log(f"Finished processing directory {root}", level="SUCCESS")
+            if self.log is not None: self.log.write_log(f"Processing time: {time.time() - start_time} seconds", level="DEBUG")
             print("Done!\n")
 
         df = pd.concat(df_list, ignore_index=True)
         df["GENEINFO"] = df["GENEINFO"].apply(lambda x: x.split(":")[0] if pd.notnull(x) else x)
         df.rename(columns={"CLINVARPAT": "RIS"}, inplace=True)
-        return df
+        if self.log is not None: self.log.write_log(f"Found {len(self.duplicated_files)} duplicates", level="WARNING")
+        cleaner = DataCleaner(self.log)
+        return cleaner.clean_dataframe(df, columns_to_keep=["CHROM", "POS", "REF", "ALT", "AF", "GENEINFO", "NAME", "TISSUE", "CTYPE","GT"], duplicated_files=self.duplicated_files)
 
     @staticmethod
     def load_data(path="Data/processed_data.csv",log=None ):
@@ -119,6 +138,7 @@ class VCFProcessor:
 class DataCleaner:
     def __init__(self, log):
         self.log = log
+        self.processor = VCFProcessor(None)
     
     def drop_nan_columns(self, dataframe):
         df = dataframe.copy()
@@ -127,15 +147,29 @@ class DataCleaner:
                 df.drop(col, axis=1, inplace=True)
         return df
 
-    def clean_dataframe(self, dataframe):
+    def clean_dataframe(self, dataframe, columns_to_keep=["CHROM", "POS", "REF", "ALT", "AF", "GENEINFO", "NAME", "TISSUE", "CTYPE","GT"], duplicated_files=[]):
+
         df = dataframe.copy()
         pre_num_cols = len(df.columns)
+
+        for file in duplicated_files:
+            old_df = df[df["NAME"] == self.processor.extract_identifier(file)]
+            new_df = self.processor.process_vcf_file(file)
+
+            if new_df is not None and new_df.shape[0] > 0 and new_df.shape[0] > old_df.shape[0]: 
+                df = df[df["NAME"] != self.processor.extract_identifier(file)]
+                df = pd.concat([df, new_df], ignore_index=True)
+                if self.log is not None: self.log.write_log(f"Replaced {self.processor.extract_identifier(file)} with {file}", level="DEBUG")
+
         df = self.drop_nan_columns(df)
-        self.log.write_log(f"Dropped {pre_num_cols - len(df.columns)} NaN columns", level="DEBUG")
-        self.log.write_log("Dropping FILTER columns", level="DEBUG")
+        if self.log is not None: self.log.write_log(f"Dropped {pre_num_cols - len(df.columns)} NaN columns", level="DEBUG")
         pre_num_cols = len(df.columns)
+        if self.log is not None: self.log.write_log("Dropping FILTER columns", level="DEBUG")
         for column in df.columns:
-            if "FILTER" in column:
+            if "FILTER" in column or column not in columns_to_keep:
                 df.drop(column, axis=1, inplace=True)
-        self.log.write_log(f"Dropped {pre_num_cols - len(df.columns)} FILTER columns", level="DEBUG")
+
+        df["CHROM"] = df["CHROM"].apply(lambda x: x.replace("chr", "") if pd.notnull(x) else x)
+        
+        if self.log is not None: self.log.write_log(f"Dropped {pre_num_cols - len(df.columns)} columns", level="DEBUG")
         return df
