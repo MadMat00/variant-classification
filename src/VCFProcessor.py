@@ -172,4 +172,4 @@ class DataCleaner:
         df["CHROM"] = df["CHROM"].apply(lambda x: x.replace("chr", "") if pd.notnull(x) else x)
         
         if self.log is not None: self.log.write_log(f"Dropped {pre_num_cols - len(df.columns)} columns", level="DEBUG")
-        return df
+        return df.astype(str)
