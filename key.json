@@ -1,0 +1,21 @@
+{
+"transcript_consequences": [
+    "1000gp3_eur_af", 
+    "clinpred_pred", 
+    "clinpred_rankscore", 
+    "clinvar_id", 
+    "domains_count", 
+    "gnomad_exomes_non_cancer_nfe_af", 
+    "mutationassessor_rankscore", 
+    "mutationtaster_converted_rankscore", 
+    "polyphen2_hdiv_rankscore", 
+    "sift_converted_rankscore",
+    "strand",
+    "sift_score",
+    "sift_converted_rankscore"
+    ],
+"colocated_variants": [
+    "clin_sig_allele",
+    "pubmed_count"
+]
+}   
