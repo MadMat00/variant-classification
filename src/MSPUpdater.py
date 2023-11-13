@@ -2,9 +2,8 @@ import pandas as pd
 import re
 
 class MSPUpdater:
-    def __init__(self, dataset_file, origine_file, log):
-        self.dataset_file = dataset_file
-        self.origine_file = origine_file
+    def __init__(self, gmo_path, log):
+        self.gmo_path = gmo_path
         self.log = log
         self.nomi_non_trovati_registrati = set()  # Set per tenere traccia dei nomi non trovati già registrati
 
@@ -18,23 +17,19 @@ class MSPUpdater:
         s = s.upper()
         return s
 
-    def aggiungi_colonna_msp(self):
-        # Leggi il dataset Pandas
-        dataset = pd.read_csv(self.dataset_file)
+    def aggiungi_colonna_msp(self, df):
 
         # Leggi il file Excel di origine in un DataFrame
-        origine = pd.read_excel(self.origine_file, engine="xlrd")
+        origine = pd.read_excel(self.gmo_path, engine="xlrd")
 
         # Applica la pulizia solo alla colonna [:, 1] (seconda colonna)
-        colonna = origine.iloc[:, 1].apply(self.pulisci_stringa)
-        
         origine.iloc[:, 1] = origine.iloc[:, 1].apply(self.pulisci_stringa)
 
         # Effettua una fusione (merge) tra il dataset e il file di origine
-        risultati = pd.merge(dataset, origine, left_on="NAME", right_on="Informazione addizionale: GEN-MOL1", how="left")
+        risultati = pd.merge(df, origine, left_on="NAME", right_on="Informazione addizionale: GEN-MOL1", how="left")
 
         # Crea una nuova colonna "MSP" e assegna i valori dalla colonna "Codice Esterno"
-        dataset["MSP"] = risultati["Codice Esterno"]
+        df["MSP"] = risultati["Codice Esterno"]
 
         # Utilizza il logger personalizzato per registrare eventuali nomi non trovati, evitando duplicati
         nomi_non_trovati = risultati[pd.isna(risultati["Codice Esterno"])]
@@ -43,7 +38,7 @@ class MSPUpdater:
                 self.log.write_log(f"Nome non trovato: {nome_non_trovato}", level="WARNING")
                 self.nomi_non_trovati_registrati.add(nome_non_trovato)
 
-        return dataset
+        return df
 
 
 '''

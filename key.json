@@ -12,7 +12,8 @@
     "sift_converted_rankscore",
     "strand",
     "sift_score",
-    "sift_converted_rankscore"
+    "sift_converted_rankscore",
+    "hgvsc"
     ],
 "colocated_variants": [
     "clin_sig_allele",

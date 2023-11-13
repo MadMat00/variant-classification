@@ -39,63 +39,152 @@ class EnsemblAPI:
         self.__colocated_variants_info_column = json.load(open("key.json"))["colocated_variants"]
     
     def __request_data(self, url:str)->dict:
+        try_count = 0
         while True:
+            try_count += 1
             try:
+                if try_count > 10: return None
                 r = httpx.get(url, headers=self.__headers)
                 if r.status_code != 200 and r.status_code != 400: # Random error
-                    self.__log.write_log(f"Could not connect to Ensembl API: {r.status_code}", "ERROR")
+                    self.__log.write_log(f"Could not connect to Ensembl API: {r.status_code}. Try: {try_count}", "ERROR")
                     continue
                 elif r.status_code == 400: # Bad Request
-                    self.__log.write_log(f"Could not connect to Ensembl API: {r.status_code}", "ERROR")
+                    self.__log.write_log(f"Could not connect to Ensembl API: {r.status_code}. Try: {try_count}", "ERROR")
                     return None
                 return r.json()
             except Exception as e: # Errore nella chiamata
                 self.__log.write_log(f"Could not connect to Ensembl API: {e}", "ERROR")
+            
     
-    def __get_variant_type(self, variant:str)->str:
-        """
+    def __get_variant_type(self, variant):
+        '''
         Simple heuristics to get the variant type
-        
+
+        1 182712 182712 A/C 1  --> 1:182712-182712:1/C
+        3 319781 319781 A/- 1  --> 3:319781-319781:1/-
+        19 110748 110747 -/T 1 --> 19:110748-110747:1/T
+        1 160283 471362 DUP 1 --> 1:160283-471362:1/DUP
+        1 1385015 1387562 DEL 1 --> 1:1385015-1387562:1/DEL  
+
         1 182712 . A C . . . --> 1:182712-182712:1/C
         3 319780 . GA G . . . --> 3:319781-319781:1/- 
         3 319780 . GAA G . . . --> 3:319781-319782:1/- 
         19 110747 . G GT . . . --> 9:110748-110747:1/T 
         19 110747 . G GTT . . . --> 19:110748-110747:1/TT 
-        """
+        1 160283 sv1 . <DUP> . . SVTYPE=DUP;END=471362 . --> UNABLE TO GENERATE PREVIEW!
+        1 1385015 sv2 . <DEL> . . SVTYPE=DEL;END=1387562 . --> UNABLE TO GENERATE PREVIEW!
+        '''
 
+        new_variant = variant
         variant_splitted = variant.split()
+        if len(variant_splitted) == 5:
+            # Ensembl default
+
+            ref_alt = variant_splitted[3].split('/')
+            if len(ref_alt) == 2:
+                if ref_alt[1] == '-':
+                    new_variant = ''.join([
+                        variant_splitted[0], 
+                        ':', 
+                        variant_splitted[1], 
+                        '-', 
+                        variant_splitted[2],
+                        ':',
+                        variant_splitted[4],
+                        '/',
+                        '-',
+                        ])
+                else:
+                    new_variant = ''.join([
+                        variant_splitted[0], 
+                        ':', 
+                        variant_splitted[1], 
+                        '-', 
+                        variant_splitted[2],
+                        ':',
+                        variant_splitted[4],
+                        '/',
+                        ref_alt[1],
+                        ])
+            elif variant_splitted[3] in ['DUP', 'DEL']:
+                new_variant = ''.join([
+                    variant_splitted[0], 
+                    ':', 
+                    variant_splitted[1], 
+                    '-', 
+                    variant_splitted[2],
+                    ':',
+                    variant_splitted[4],
+                    '/',
+                    variant_splitted[3],
+                    ])
+            else:
+                self.__log.write_log(f"Impossibile riconoscere questa variante {variant}", "ERROR")
+
+            return 'region', new_variant
 
         if len(variant_splitted) == 8:
             if len(variant_splitted[3]) == 1 and len(variant_splitted[4]) == 1:
                 #Simple SNP
-                new_variant = "".join([variant_splitted[0], ":",
-                                       variant_splitted[1], "-",
-                                       variant_splitted[1], ":", "1", "/", 
-                                       variant_splitted[4]])
-                
+                new_variant = ''.join([
+                    variant_splitted[0],
+                    ':',
+                    variant_splitted[1],
+                    '-',
+                    variant_splitted[1],
+                    ':',
+                    '1', # Not sure what this is..
+                    '/',
+                    variant_splitted[4],
+                    ])
             elif len(variant_splitted[3]) > len(variant_splitted[4]):
-                #Deletion
-                new_variant = "".join([variant_splitted[0], ":",
-                                       str(int(variant_splitted[1]) + len(variant_splitted[4])), "-",
-                                       str(int(variant_splitted[1]) + len(variant_splitted[3]) - len(variant_splitted[4])), ":", "1", "/", "-",
-                                    ])
+                # Deletion
+                new_variant = ''.join([
+                    variant_splitted[0],
+                    ':',
+                    str(int(variant_splitted[1]) + len(variant_splitted[4])),
+                    '-',
+                    str(int(variant_splitted[1]) + len(variant_splitted[3]) - len(variant_splitted[4])),
+                    ':',
+                    '1', # Not sure what this is..
+                    '/',
+                    '-',
+                    ])
             elif len(variant_splitted[3]) < len(variant_splitted[4]):
-                #Insertion
-                #19 110747 . G GT . . . --> 9:110748-110747:1/T 
-                #19 110747 . G GTT . . . --> 19:110748-110747:1/TT 
-                new_variant = "".join([variant_splitted[0], ":",
-                                       str(int(variant_splitted[1]) + len(variant_splitted[3])), "-",
-                                       variant_splitted[1], ":", "1", "/",
-                                       variant_splitted[4][len(variant_splitted[3]):]
-                                       ])
+                # Insertion
+                # 19 110747 . G GT . . . --> 9:110748-110747:1/T 
+                # 19 110747 . G GTT . . . --> 19:110748-110747:1/TT 
+                new_variant = ''.join([
+                    variant_splitted[0],
+                    ':',
+                    str(int(variant_splitted[1]) + len(variant_splitted[3])),
+                    '-',
+                    variant_splitted[1],
+                    ':',
+                    '1', # Not sure what this is..
+                    '/',
+                    variant_splitted[4][len(variant_splitted[3]):],
+                    ])
             else:
-                self.__log.write_log(f"Could not parse VCF variant: {variant}", "ERROR")
-                return None
+                self.__log.write_log(f"Impossibile riconoscere questa variante {variant}", "ERROR")
 
-            return "region", new_variant
+            return 'region', new_variant
+
+        if variant[0:2] == 'rs':
+            # Variant identifier
+            return 'id', new_variant
+
+        if ':' in variant:
+            # HGVS notation 
+            return 'hgvs', new_variant
+
+        if len(variant_splitted) > 1:
+            self.__log.write_log(f"Impossibile riconoscere questa variante {variant}", "ERROR")
+
+        return 'id', new_variant # Hoping for the best
         
     def __get_transcript_id(self, gene:str):
-        if gene not in self.__transcript_id_df["Gene"]:
+        if self.__transcript_id_df[self.__transcript_id_df["Gene"] == gene].shape[0] == 0:
             return None
         transcript_id = self.__transcript_id_df[self.__transcript_id_df["Gene"] == gene]["ENST"].values[0]
         return transcript_id.split(".")[0]
@@ -104,7 +193,7 @@ class EnsemblAPI:
         url = f"https://rest.ensembl.org/map/human/GRCh37/{grch37}/GRCh38?"
         r = self.__request_data(url)
         if r == None:
-            return None
+            return (None, None)
         
         start = r["mappings"][0]["mapped"]["start"]
         variant = f"{chrom} {start} . {ref} {alt} . . ."
@@ -150,10 +239,13 @@ class EnsemblAPI:
             except KeyError:
                 pass
             except TypeError:
-                if "count" in key:
-                    api_dict[key] = len(colocated_variants[key.replace("_count", "")])
-                else:
-                    api_dict[key] = colocated_variants[0][key]
+                try:
+                    if "count" in key:
+                        api_dict[key] = len(colocated_variants[0][key.replace("_count", "")])
+                    else:
+                        api_dict[key] = colocated_variants[0][key]
+                except KeyError:
+                    pass
             
         return api_dict
     
@@ -207,8 +299,11 @@ class EnsemblAPI:
                 return None
             
             # Pulizia del clin_sig_allele
-            api_dict["clin_sig_allele"] = self.__get_clean_clin_sig_allele(api_dict["clin_sig_allele"], alt)
-            
+            try:
+                api_dict["clin_sig_allele"] = self.__get_clean_clin_sig_allele(api_dict["clin_sig_allele"], alt)
+            except KeyError:
+                pass
+
             for key in ["most_severe_consequence", "variant_class"]:
                 try:
                     api_dict["variant_class"] = api[key]
@@ -244,6 +339,12 @@ class EnsemblAPI:
         if r == None:
             return None
         
+        # Salvataggio in memoria
+        self.__memory[first_variant] = r[0]
+        self.__log.write_log(f"Added variant {first_variant} to memory", "DEBUG")
+        with open(path_json, "w") as f:
+            json.dump(self.__memory, f, indent=4)
+        
         # Ricerca dei transcript_consequences e colocated_variants
         try:
             transcript_consequences = r[0]["transcript_consequences"][0]
@@ -251,18 +352,18 @@ class EnsemblAPI:
         except KeyError:
             return None
          
-        # Salvataggio in memoria
-        self.__memory[first_variant] = r[0]
-        self.__log.write_log(f"Added variant {first_variant} to memory", "DEBUG")
-        with open(path_json, "w") as f:
-            json.dump(self.__memory, f, indent=4)
+        
+        
         
         # Estrazione delle informazioni utili
         api_dict = self.__get_transcript_consequences_info(transcript_consequences)
         api_dict = {**self.__get_colocated_variants_info(colocated_variants), **api_dict}
         
         # Pulizia del clin_sig_allele
-        api_dict["clin_sig_allele"] = self.__get_clean_clin_sig_allele(api_dict["clin_sig_allele"], alt)
+        try:
+            api_dict["clin_sig_allele"] = self.__get_clean_clin_sig_allele(api_dict["clin_sig_allele"], alt)
+        except KeyError:
+            pass
         
         # Estrazione del variant_class
         for key in ["most_severe_consequence", "variant_class"]:
@@ -298,7 +399,7 @@ class EnsemblAPI:
                 df.at[index, key] = api_dict[key]
             
             # Salvataggio dei dati in un CSV
-            if index % 100 == 0 and index > 0:
+            if index % 1000 == 0 and index > 0:
                 df.head(index).to_csv("data/data_vep.csv", index=False)
                 self.__log.write_log(f"Saved the first {index} in '{path_json}'", level="SUCCESS")
                 
