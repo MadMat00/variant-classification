@@ -2,14 +2,14 @@ import pandas as pd
 import numpy as np
 
 
-class RisComparator: #TODO cambiare readcsv to readexcel
+class RisComparator:
     def __init__(self, brca_path, hc_path, log):
         self.brca_dataframe = self.__load_dataframe(brca_path)
         self.hc_dataframe = self.__load_dataframe(hc_path)
         self.__log = log
 
     def __load_dataframe(self, path):
-        df = pd.read_csv(path)
+        df = pd.read_excel(path)
         df = df[df["ANNO"]>2017]
         df_pulito = df[["RIS.", "MSP"]]
         return df_pulito

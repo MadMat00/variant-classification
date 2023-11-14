@@ -30,6 +30,13 @@ class VCFProcessor:
                     try:
                         identifier = identifier.split('_')[0]
                         identifier = identifier.replace("-", "/")
+                        if (identifier.startswith("BRCA") and identifier[4] == "/") or (identifier.startswith("HC") and identifier[2] == "/"):
+                            identifier = identifier.replace("/", "", 1)
+
+                        sub_identifier = identifier.split("/")
+                        sub_identifier[1] = sub_identifier[1][:2]
+                        identifier = sub_identifier[0] + "/" + sub_identifier[1]
+
                     except Exception as e:
                         pass
 
