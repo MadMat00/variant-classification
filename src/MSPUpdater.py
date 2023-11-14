@@ -17,13 +17,20 @@ class MSPUpdater:
         s = s.upper()
         return s
 
-    def aggiungi_colonna_msp(self, df):
+    @staticmethod
+    def rimuovi_zero_dopo_brca_hc(s):
+        # Rimuovi "0" dopo "BRCA" e "HC"
+        s = re.sub(r'BRCA0(\d+)', r'BRCA\1', s)
+        s = re.sub(r'HC0(\d+)', r'HC\1', s)
+        return s
 
+    def aggiungi_colonna_msp(self, df):
         # Leggi il file Excel di origine in un DataFrame
         origine = pd.read_excel(self.gmo_path, engine="xlrd")
 
-        # Applica la pulizia solo alla colonna [:, 1] (seconda colonna)
+        # Applica la pulizia e la rimozione degli zeri
         origine.iloc[:, 1] = origine.iloc[:, 1].apply(self.pulisci_stringa)
+        origine.iloc[:, 1] = origine.iloc[:, 1].apply(self.rimuovi_zero_dopo_brca_hc)
 
         # Effettua una fusione (merge) tra il dataset e il file di origine
         risultati = pd.merge(df, origine, left_on="NAME", right_on="Informazione addizionale: GEN-MOL1", how="left")
@@ -40,13 +47,13 @@ class MSPUpdater:
 
         return df
 
-
 '''
 # Esempio di utilizzo della classe
-dataset_file = "processed_data.csv"
-origine_file = "Estrazione GMO 2018-2023.xls"
-log = Log()  # Inizializza il logger personalizzato
+dataset_file = "src\processed_data.csv"
+origine_file = "src\Estrazione GMO 2018-2023.xls"
+log = Log()  # Assicurati che la classe Log sia disponibile
 
-msp_updater = MSPUpdater(dataset_file, origine_file, log)
-msp_updater.aggiungi_colonna_msp()
+msp_updater = MSPUpdater(origine_file, log)
+dataset = pd.read_csv(dataset_file)
+msp_updater.aggiungi_colonna_msp(dataset)
 '''
