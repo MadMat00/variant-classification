@@ -1,77 +1,59 @@
 import pandas as pd
 import re
-from Log import Log
 
 class MSPUpdater:
     def __init__(self, gmo_path, log):
         self.gmo_path = gmo_path
         self.log = log
-        self.nomi_non_trovati_registrati = set()
+        self.nomi_non_trovati_registrati = set()  # Set per tenere traccia dei nomi non trovati già registrati
 
     @staticmethod
     def pulisci_stringa(s):
-        # Pulisce la stringa: rimuove spazi bianchi, converte in maiuscolo
+        # Rimuovi spazi all'inizio e alla fine della stringa
         s = s.strip()
+        # Rimuovi spazi extra all'interno della stringa
         s = s.replace(" ", "")
+        # Trasforma tutto in maiuscolo
         s = s.upper()
         return s
 
-    def rimuovi_zero_dopo_brca_hc_dataset(self, df):
-        # Applica la rimozione degli zeri alla colonna "NAME" del DataFrame
-        #df["NAME"] = df["NAME"].apply(lambda s: re.sub(r'BRCA0(\d)', r'BRCA\1', s) if pd.notna(s) else s)
-        #df["NAME"] = df["NAME"].apply(lambda s: re.sub(r'HC0(\d)', r'HC\1', s) if pd.notna(s) else s)
-        for _,row in df.iterrows():
-            nome = row["NAME"]
-            if nome[2] == 0 and nome[:2] == "HC":
-                nome[2].pop()
-            elif nome[4] == 0 and nome[:4] == "BRCA":
-                nome[4].pop()
-            else:
-                ...
-            row["NAME"] = nome
-        return df
+    @staticmethod
+    def rimuovi_zero_dopo_brca_hc(s):
+        # Rimuovi "0" dopo "BRCA" e "HC"
+        s = re.sub(r'BRCA0(\d+)', r'BRCA\1', s)
+        s = re.sub(r'HC0(\d+)', r'HC\1', s)
+        return s
 
     def aggiungi_colonna_msp(self, df):
-        # Carica il file GMO come DataFrame
+        # Leggi il file Excel di origine in un DataFrame
         origine = pd.read_excel(self.gmo_path, engine="xlrd")
+
+        # Applica la pulizia e la rimozione degli zeri
         origine.iloc[:, 1] = origine.iloc[:, 1].apply(self.pulisci_stringa)
+        origine.iloc[:, 1] = origine.iloc[:, 1].apply(self.rimuovi_zero_dopo_brca_hc)
 
-        # Carica il dataset come DataFrame
-        df = pd.read_csv(dataset_file)
-
-        # Applica la rimozione degli zeri direttamente al DataFrame del dataset
-        df = self.rimuovi_zero_dopo_brca_hc_dataset(df)
-
-        # Esegue il merge tra il DataFrame in input e il DataFrame originale
+        # Effettua una fusione (merge) tra il dataset e il file di origine
         risultati = pd.merge(df, origine, left_on="NAME", right_on="Informazione addizionale: GEN-MOL1", how="left")
 
-        # Aggiunge la colonna "MSP" al DataFrame in input
+        # Crea una nuova colonna "MSP" e assegna i valori dalla colonna "Codice Esterno"
         df["MSP"] = risultati["Codice Esterno"]
-        df = df.dropna(subset=["MSP"])
 
-        # Identifica i nomi non trovati e registra un avviso nel log
+        # Utilizza il logger personalizzato per registrare eventuali nomi non trovati, evitando duplicati
         nomi_non_trovati = risultati[pd.isna(risultati["Codice Esterno"])]
         for nome_non_trovato in nomi_non_trovati["NAME"]:
             if nome_non_trovato not in self.nomi_non_trovati_registrati:
                 self.log.write_log(f"Nome non trovato: {nome_non_trovato}", level="WARNING")
                 self.nomi_non_trovati_registrati.add(nome_non_trovato)
 
-        return df  # Restituisci il DataFrame con la colonna "MSP"
+        return df
 
+'''
 # Esempio di utilizzo della classe
 dataset_file = "src\processed_data.csv"
 origine_file = "src\Estrazione GMO 2018-2023.xls"
 log = Log()  # Assicurati che la classe Log sia disponibile
 
-# Inizializza l'oggetto MSPUpdater
 msp_updater = MSPUpdater(origine_file, log)
-
-# Leggi il dataset come DataFrame
 dataset = pd.read_csv(dataset_file)
-
-# Aggiungi la colonna "MSP" al dataset
-dataset = msp_updater.aggiungi_colonna_msp(dataset)  # Assegna il risultato al DataFrame
-
-# Salva il dataset finale con la colonna "MSP" in un nuovo file CSV eliminando le righe con "MSP" vuoto
-dataset = dataset.dropna(subset=["MSP"])
-dataset.to_csv("dataset_con_msp.csv", index=False)
+msp_updater.aggiungi_colonna_msp(dataset)
+'''
