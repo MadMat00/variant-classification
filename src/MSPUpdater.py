@@ -35,9 +35,6 @@ class MSPUpdater:
         origine = pd.read_excel(self.gmo_path, engine="xlrd")
         origine.iloc[:, 1] = origine.iloc[:, 1].apply(self.pulisci_stringa)
 
-        # Carica il dataset come DataFrame
-        df = pd.read_csv(dataset_file)
-
         # Applica la rimozione degli zeri direttamente al DataFrame del dataset
         df = self.rimuovi_zero_dopo_brca_hc_dataset(df)
 

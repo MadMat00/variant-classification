@@ -1,58 +1,55 @@
 import pandas as pd
-import numpy as np
+from tqdm import tqdm
 
 
-class RisComparator:
+class RisComparator: #TODO cambiare readcsv to readexcel
     def __init__(self, brca_path, hc_path, log):
-        self.brca_dataframe = self.__load_dataframe(brca_path)
-        self.hc_dataframe = self.__load_dataframe(hc_path)
+        self.brca_df = self.__load_dataframe(brca_path)
+        self.hc_df = self.__load_dataframe(hc_path)
+        self._full_df = pd.concat([self.brca_df, self.hc_df])
         self.__log = log
 
     def __load_dataframe(self, path):
         df = pd.read_excel(path)
         df = df[df["ANNO"]>2017]
-        df_pulito = df[["RIS.", "MSP"]]
-        return df_pulito
+        return df
 
-    def __missing_MSP(self,hc_brca_dataframe,dataframe,identificativo="brca" or "hc"):
-        lista_MSP_hc_brca = set(hc_brca_dataframe["MSP"])
-        lista_MSP = set(dataframe["MSP"])
-        differenza = lista_MSP_hc_brca - lista_MSP
-        for x in list(differenza):
-            self.__log.write_log(level="ERROR",message=f"Nel dataframe {identificativo}, abbiamo un MSP IN più con codice: {x}")
-        return
+    def __missing_MSP(self,vcf_df, msp_df, identificativo):
+        msp_hc_brca = set(vcf_df["MSP"])
+        msp = set(msp_df["MSP"])
+        for x in list(msp_hc_brca - msp):
+            self.__log.write_log(level="DEBUG",message=f"Nel dataframe {identificativo}, abbiamo un MSP IN più con codice: {x}")
 
-    def compare_vcf_xlsx(self, dataframe):
-        self.__missing_MSP(self.brca_dataframe,dataframe,identificativo="brca")
-        self.__missing_MSP(self.hc_dataframe,dataframe,identificativo="hc")
-
-        #self.__missing_MSP(self.hc_dataframe)
-        lista_ris = []
-        #c=0
-        for index, row in dataframe.iterrows():
-            ctype, msp, ris = row["CTYPE"], row["MSP"], row["CLEANVARPAT"]
-            if ctype == "BRCA":
-                genes_ris = self.brca_dataframe[self.brca_dataframe["MSP"] == msp]["RIS"].values
+    def compare_vcf_xlsx(self, df:pd.DataFrame):
+        for msp in tqdm(set(df["MSP"])):
+            found = False
+            msp_df = df[df["MSP"] == msp]
+            genes_ris = self._full_df[self._full_df["MSP"] == msp]
+            
+            if genes_ris.empty:
+                self.__log.write_log(level="ERROR",message=f"MSP: {msp}, non trovato")
+                continue
+            
+            if "NEG" in genes_ris["RIS."].values[0]:
+                df.loc[df["MSP"] == msp, "RIS."] = "NEG"
             else:
-                genes_ris = self.hc_dataframe[self.hc_dataframe["MSP"] == msp]["RIS"].values
-            if genes_ris.size > 0:
-                genes_ris = genes_ris[0]
-                if ris == genes_ris:
-                    ris_finale = genes_ris
-                elif ris == "VUS":
-                    ris_finale = genes_ris
-                elif genes_ris == "VUS":
-                    ris_finale = ris
-                else:
-                    ris_finale = np.nan
-                    self.__log.write_log(level="ERROR",message=f"Incongruenza fra i dati dei VCF Tipo di varianza: {ctype}, MSP: {msp}")
+                
+                df.loc[df["MSP"] == msp, "RIS."] = "NEG"
+                hgvs = genes_ris["VARIANTE"].values[0]
+                if isinstance(hgvs, float):
+                    self.__log.write_log(level="ERROR",message=f"MSP: {msp}, HGVS sbagliato: {hgvs}")
+                    continue
+                hgvs = hgvs.replace(" ", "").replace("\n", "")
+                for _, row in msp_df.iterrows():
+                    if isinstance(row["hgvsc"], float):
+                        continue
 
-                lista_ris.append(ris_finale)
-            else:
-                lista_ris.append("NOT FOUND")
-                self.__log.write_log(level="ERROR",
-                                     message=f"MSP: {msp}, non prensente nel BRCA e neanche nel HC")
-
-        dataframe["RIS"] = lista_ris
-        return dataframe
-
+                    if row["hgvsc"].split(":")[1] in hgvs:
+                        found = True
+                        df.loc[(df["MSP"] == msp) & (df["hgvsc"] == row["hgvsc"]), "RIS."] = genes_ris["RIS."].values[0]
+                
+                if not found:
+                    self.__log.write_log(level="ERROR",message=f"MSP: {msp}, HGVS sbagliato: {hgvs}")
+        
+        return df
+        

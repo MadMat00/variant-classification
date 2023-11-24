@@ -37,13 +37,15 @@ class EnsemblAPI:
         
         # Chiavi delle api dentro colocated_variants
         self.__colocated_variants_info_column = json.load(open("key.json"))["colocated_variants"]
+        
+        self.__frequencies_key = json.load(open("key.json"))["frequencies_key"]
     
     def __request_data(self, url:str)->dict:
         try_count = 0
         while True:
             try_count += 1
             try:
-                if try_count > 10: return None
+                if try_count > 5: return None
                 r = httpx.get(url, headers=self.__headers)
                 if r.status_code != 200 and r.status_code != 400: # Random error
                     self.__log.write_log(f"Could not connect to Ensembl API: {r.status_code}. Try: {try_count}", "ERROR")
@@ -234,6 +236,10 @@ class EnsemblAPI:
             try:
                 if "count" in key:
                     api_dict[key] = len(colocated_variants[key.replace("_count", "")])
+                elif key == "frequencies":
+                    alt = list(colocated_variants[key].keys())[0]
+                    for frequencies_key in self.__frequencies_key:
+                        api_dict[frequencies_key] = colocated_variants[key][alt][frequencies_key.replace("frequencies_", "")]
                 else:
                     api_dict[key] = colocated_variants[key]
             except KeyError:
@@ -242,6 +248,11 @@ class EnsemblAPI:
                 try:
                     if "count" in key:
                         api_dict[key] = len(colocated_variants[0][key.replace("_count", "")])
+                        
+                    elif key == "frequencies":
+                        alt = list(colocated_variants[0][key].keys())[0]
+                        for frequencies_key in self.__frequencies_key:
+                            api_dict[frequencies_key] = colocated_variants[0][key][alt][frequencies_key.replace("frequencies_", "")]
                     else:
                         api_dict[key] = colocated_variants[0][key]
                 except KeyError:
@@ -287,16 +298,22 @@ class EnsemblAPI:
     
     def get_api_info(self, chrom:str, pos:str, ref:str, alt:str, path_json:str):
         first_variant = f"{chrom} {pos} . {ref} {alt} . . ."
-        
+        api_dict = {}
         # Controllo in memoria
         if first_variant in self.__memory:
             api = self.__memory[first_variant]
-            
             try:
                 api_dict = self.__get_transcript_consequences_info(api["transcript_consequences"][0])
+            except KeyError:
+                pass
+            
+            try:
                 api_dict = {**self.__get_colocated_variants_info(api["colocated_variants"]), **api_dict}
             except KeyError:
-                return None
+                pass
+            
+            if len(api_dict) == 0:
+                return api_dict
             
             # Pulizia del clin_sig_allele
             try:
@@ -312,6 +329,12 @@ class EnsemblAPI:
             
             api_dict["seq_region_name"] = api["seq_region_name"]
             return api_dict
+        
+        # Allocazione in memoria
+        self.__memory[first_variant] = {}
+        self.__log.write_log(f"Added variant {first_variant} to memory", "DEBUG")
+        with open(path_json, "w") as f:
+            json.dump(self.__memory, f, indent=4)
         
         # Valore per la richiesta api di VEP
         result = self.__get_variant_type(first_variant)
@@ -341,7 +364,7 @@ class EnsemblAPI:
         
         # Salvataggio in memoria
         self.__memory[first_variant] = r[0]
-        self.__log.write_log(f"Added variant {first_variant} to memory", "DEBUG")
+        self.__log.write_log(f"Updated variant {first_variant} to memory", "DEBUG")
         with open(path_json, "w") as f:
             json.dump(self.__memory, f, indent=4)
         

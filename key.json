@@ -17,6 +17,11 @@
     ],
 "colocated_variants": [
     "clin_sig_allele",
-    "pubmed_count"
+    "pubmed_count",
+    "frequencies"
+],
+"frequencies_key":[
+    "frequencies_af",
+    "frequencies_gnomadg_nfe"
 ]
-}   
+} 
