@@ -7,7 +7,6 @@ from src.VCFProcessor import VCFProcessor, DataCleaner
 from src.EnsemblAPI import EnsemblAPI
 from src.MSPUpdater import MSPUpdater
 from src.RisComparator import RisComparator
-from ydata_profiling import ProfileReport
 
 warnings.filterwarnings('ignore')
 
@@ -22,7 +21,6 @@ if __name__ == "__main__":
     log.write_log("Starting program", level="INFO")
     try:
         df = processor.get_dataframe()
-        df = cleaner.clean_dataframe(df)
         df = api.get_api_info_from_df(df, path_json="memory.json")
         df = msp.aggiungi_colonna_msp(df)
         df = ris.compare_vcf_xlsx(df)
@@ -36,6 +34,3 @@ if __name__ == "__main__":
         log.write_log("Program interrupted by user", level="CRITICAL")
         log.write_log(f"Total time: {time.time() - start_program_time} seconds", level="DEBUG")
         
-    df = pd.read_csv("data/dataset.csv")
-    profile = ProfileReport(df, title="Profiling Report")
-    profile.to_file("your_report.html")

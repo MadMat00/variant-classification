@@ -129,13 +129,17 @@ class VCFProcessor:
         df["GENEINFO"] = df["GENEINFO"].apply(lambda x: x.split(":")[0] if pd.notnull(x) else x)
         df.rename(columns={"CLINVARPAT": "RIS"}, inplace=True)
         if self.log is not None: self.log.write_log(f"Found {len(self.duplicated_files)} duplicates", level="WARNING")
+        self.log.write_log(f"Dataset grezzo: {df.shape}", level="SUCCESS")
         cleaner = DataCleaner(self.log)
-        return cleaner.clean_dataframe(df, columns_to_keep=["CHROM", "POS", "REF", "ALT", "AF", "GENEINFO", "NAME", "TISSUE", "CTYPE","GT"], duplicated_files=self.duplicated_files)
+        cleaned_df = cleaner.clean_dataframe(df, columns_to_keep=["CHROM", "POS", "REF", "ALT", "AF", "GENEINFO", "NAME", "TISSUE", "CTYPE","GT"], duplicated_files=self.duplicated_files)
+        self.log.write_log(f"Dataset pulito: {cleaned_df.shape}", level="SUCCESS")
+        return cleaned_df
 
-    @staticmethod
-    def load_data(path="Data/processed_data.csv",log=None ):
+
+    def load_data(self,path="Data/processed_data.csv",log=None ):
         try:
             df = pd.read_csv(path)
+            self.log.write_log(f"Data loaded form {path}: {df.shape}", level="INFO")
         except Exception as e:
             if log is not None:
                 log.write_log(f"Program finished with error: {e}", level="CRITICAL")
@@ -158,7 +162,7 @@ class DataCleaner:
 
         df = dataframe.copy()
         pre_num_cols = len(df.columns)
-
+        self.log.write_log(f"Going trough {len(duplicated_files)} files", level="DEBUG")
         for file in duplicated_files:
             old_df = df[df["NAME"] == self.processor.extract_identifier(file)]
             new_df = self.processor.process_vcf_file(file)
